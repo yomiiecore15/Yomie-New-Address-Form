@@ -19,10 +19,8 @@ import { motion, AnimatePresence } from 'motion/react';
 export default function App() {
   const [activeTab, setActiveTab] = useState<'order' | 'checker'>('order');
   const [config, setConfig] = useState<SheetConfig>(INITIAL_CONFIG);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('yomie_admin_authenticated') === 'true';
-  });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(true);
   const [isPasscodeOpen, setIsPasscodeOpen] = useState(false);
   
   // Postal Checker states
