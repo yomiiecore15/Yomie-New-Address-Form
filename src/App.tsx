@@ -56,20 +56,20 @@ export default function App() {
             ...parsed,
             spreadsheetUrl: "https://docs.google.com/spreadsheets/d/1Iwdv0S8JPMcb1ZL6xIwr7B-cKuN75QvpqPgbS1r1wco/edit?gid=0#gid=0",
             spreadsheetId: "1Iwdv0S8JPMcb1ZL6xIwr7B-cKuN75QvpqPgbS1r1wco",
-            appsScriptUrl: "https://script.google.com/macros/s/AKfycbx3Fie3eDEUc5SVBvCIPe-tYEayqlAezu4JjMKlIgiLsPvw76TO_IEsMWvc4HADQmQwvA/exec"
+            appsScriptUrl: "https://hook.us2.make.com/302fbs3gh24rtoa3ryb2t7a6hzfp5j9t"
           };
           setConfig(migrated);
           localStorage.setItem('yomie_postal_config_v4', JSON.stringify(migrated));
           console.log("Migrating config to the new spreadsheet and resetting Apps Script url.");
-        } else if (!parsed.appsScriptUrl || parsed.appsScriptUrl !== "https://script.google.com/macros/s/AKfycbx3Fie3eDEUc5SVBvCIPe-tYEayqlAezu4JjMKlIgiLsPvw76TO_IEsMWvc4HADQmQwvA/exec") {
-          // If already on the new sheet but has an old/empty script url, auto-link to the new script deployment!
+        } else if (!parsed.appsScriptUrl) {
+          // If already on the new sheet but has an empty script url, auto-link to the new default webhook URL
           const migrated = {
             ...parsed,
-            appsScriptUrl: "https://script.google.com/macros/s/AKfycbx3Fie3eDEUc5SVBvCIPe-tYEayqlAezu4JjMKlIgiLsPvw76TO_IEsMWvc4HADQmQwvA/exec"
+            appsScriptUrl: "https://hook.us2.make.com/302fbs3gh24rtoa3ryb2t7a6hzfp5j9t"
           };
           setConfig(migrated);
           localStorage.setItem('yomie_postal_config_v4', JSON.stringify(migrated));
-          console.log("Updating apps script URL to the new deployment URL.");
+          console.log("Updating apps script URL to the default webhook URL.");
         } else {
           setConfig(parsed);
         }

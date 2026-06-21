@@ -5,7 +5,7 @@ import {
   Settings2, Copy, AlertTriangle, CheckCircle2,
   ShieldAlert, Info, ClipboardList, Database, MessageSquare, 
   CreditCard, Search, Link, Bell, FileText, Trash2, ShoppingBag,
-  Plus
+  Plus, Download
 } from 'lucide-react';
 import { extractSpreadsheetId, APPS_SCRIPT_TEMPLATE, getBackendUrl, getAbsoluteBackendUrl } from '../sampleData';
 
@@ -52,6 +52,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [localOrders, setLocalOrders] = useState<PreorderData[]>([]);
   const [historySearch, setHistorySearch] = useState('');
   const [copiedScript, setCopiedScript] = useState(false);
+  const [guideSubTab, setGuideSubTab] = useState<'nocode' | 'script'>('nocode');
   const [confirmClear, setConfirmClear] = useState(false);
 
   // Live incoming LINE Webhook log tracking states
@@ -107,18 +108,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSenderAppPass(config.senderAppPass || '');
     setBackendUrl(config.backendUrl || '');
     
-    // Fetch local orders history representing the sheet's backups
-    const savedOrders = localStorage.getItem('yomie_orders_history_v2');
-    if (savedOrders) {
+    const fetchServerOrders = async () => {
       try {
-        setLocalOrders(JSON.parse(savedOrders));
+        const res = await fetch(`${getBackendUrl(config.backendUrl)}/api/orders`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.orders) {
+            setLocalOrders(data.orders);
+            localStorage.setItem('yomie_orders_history_v2', JSON.stringify(data.orders));
+            return;
+          }
+        }
       } catch (err) {
-         console.error(err);
+        console.error("Failed to fetch server orders, falling back to local storage", err);
       }
-    }
+
+      const savedOrders = localStorage.getItem('yomie_orders_history_v2');
+      if (savedOrders) {
+        try {
+          setLocalOrders(JSON.parse(savedOrders));
+        } catch (err) {
+           console.error(err);
+        }
+      }
+    };
 
     if (isOpen) {
       fetchWebhookEvents();
+      fetchServerOrders();
       if (config.lineChannelAccessToken) {
         syncTokenWithServer(config.lineChannelAccessToken);
       }
@@ -132,6 +149,76 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setLocalOrders([]);
     localStorage.removeItem('yomie_orders_history_v2');
     setConfirmClear(false);
+
+    fetch(`${getBackendUrl(config.backendUrl)}/api/clear-orders`, {
+      method: "POST"
+    }).catch(err => console.error("Failed to clear server orders:", err));
+  };
+
+  const handleExportCSV = () => {
+    if (localOrders.length === 0) return;
+
+    const headers = [
+      "วัน-เวลา",
+      "ชื่อลูกค้า",
+      "เบอร์โทร",
+      "Account",
+      "รหัสไปรษณีย์",
+      "ตำบล",
+      "อำเภอ",
+      "จังหวัด",
+      "ที่อยู่โดยละเอียด",
+      "ที่อยู่จัดส่งเต็ม",
+      "รายการสินค้า",
+      "ยอดรวมสินค้า(บาท)",
+      "ยอดโอนจริง(บาท)",
+      "วิธีการชำระ",
+      "การชำระค่าส่ง",
+      "หมายเหตุเพิ่มเติม"
+    ];
+
+    const escapeCSV = (str: any) => {
+      if (str === undefined || str === null) return "";
+      const s = String(str).replace(/"/g, '""');
+      if (s.includes(",") || s.includes("\n") || s.includes('"')) {
+        return `"${s}"`;
+      }
+      return s;
+    };
+
+    const rows = localOrders.map(order => {
+      const itemNames = order.items && order.items.map(it => `${it.itemName} (x${it.quantity})`).join("; ");
+      const shippingFull = order.shippingInfo || `${order.detailAddress || ''} ต.${order.subdistrict || ''} อ.${order.district || ''} จ.${order.province || ''} ${order.postalCode || ''}`;
+      
+      return [
+        order.timestamp || "",
+        order.name || "",
+        order.phone || "",
+        order.customerAccount || "",
+        order.postalCode || "",
+        order.subdistrict || "",
+        order.district || "",
+        order.province || "",
+        order.detailAddress || "",
+        shippingFull,
+        itemNames || "",
+        order.totalAmount || "0",
+        order.transferAmount || "0",
+        order.paymentMethod || "",
+        order.shippingPaymentStatus || "",
+        order.additionalNotes || ""
+      ].map(escapeCSV).join(",");
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Yomie_Preorders_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Test connection or trigger a test LINE Notification/Email via backend
@@ -160,6 +247,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       district: "คลองเตย",
       province: "กรุงเทพมหานคร",
       detailAddress: "ทดสอบการเชื่อมต่อระบบส่วนแอดมินหลัก",
+      shippingInfo: "ทดสอบการเชื่อมต่อระบบส่วนแอดมินหลัก ต.คลองเตย อ.คลองเตย จ.กรุงเทพมหานคร 10110",
       items: [{ itemName: "ตุ๊กตาทดสอบโมเดลไลน์ Yomiie", quantity: 1, notes: "ทดสอบระบบ" }],
       transferAmount: 9.99,
       transferTime: new Date().toLocaleString('th-TH'),
@@ -374,18 +462,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div className="space-y-1">
                   <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold text-gray-700 block">Google Apps Script Web App URL</label>
-                    <span className="text-[10px] text-[#eb5e45] font-bold font-sans">คีย์บันทึก Google Sheet</span>
+                    <label className="text-[11px] font-bold text-gray-700 block">Webhook URL / ลิงก์เชื่อมโยงชีต (Google Sheets / Zapier / Make.com)</label>
+                    <span className="text-[10px] text-indigo-600 font-bold font-sans">เชื่อมต่อนำเข้า Google Sheet อัตโนมัติ</span>
                   </div>
                   <input
                     type="text"
-                    placeholder="https://script.google.com/macros/s/.../exec"
+                    placeholder="วางลิงก์ Webhook จาก Zapier, Make.com หรือ Google Script ที่นี่..."
                     value={appsScriptUrl}
                     onChange={(e) => setAppsScriptUrl(e.target.value)}
-                    className="w-full text-xs p-3 border border-gray-200 focus:border-[#eb5e45] rounded-xl text-gray-900 font-mono"
+                    className="w-full text-xs p-3 border border-gray-200 focus:border-indigo-500 rounded-xl text-gray-900 font-mono"
                   />
                   <p className="text-[10px] text-gray-400">
-                    นำลิงก์ที่ได้จากการ Deploy Web App ในหน้าต่าง Apps Script นำมาวางที่นี่เพื่อเขียนข้อมูลลงสเปรดชีต
+                    รองรับ Webhook โดยตรงจาก Zapier, Make.com หรือ Google Apps Script เพื่อดึงข้อมูลออเดอร์และการโอนไปกรอกลง Google Sheets ของท่านทันทีอย่างปลอดภัย
                   </p>
                 </div>
 
@@ -1006,7 +1094,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             className="rounded text-[#eb5e45] focus:ring-[#eb5e45] w-3.5 h-3.5 cursor-pointer"
                           />
                           <label htmlFor={`req-${q.id}`} className="text-[11px] text-gray-650 font-bold cursor-pointer select-none">
-                            จำเป็นต้องกรอกคำตอบข้อมนี้ (Required)
+                            จำเป็นต้องกรอกคำตอบข้อนี้ (Required)
                           </label>
                         </div>
                       </div>
@@ -1026,7 +1114,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   📜 รายการออเดอร์ล่าสุด
                 </span>
                 {localOrders.length > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleExportCSV}
+                      className="text-[10px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>ดาวน์โหลด CSV / Excel</span>
+                    </button>
                     {confirmClear ? (
                       <div className="flex items-center gap-2 animate-fade-in text-[10px]">
                         <span className="text-red-500 font-bold shrink-0">ยืนยันลบประวัติ?</span>
@@ -1145,61 +1240,125 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* TAB 3: STEP-BY-STEP SHEETS INTEGRATION GUIDE */}
           {activeTab === 'guide' && (
             <div className="space-y-4 animate-fade-in text-left">
-              <span className="text-[11px] font-black text-[#db5984] tracking-wider uppercase font-mono">
-                🛠️ วิธีเชื่อมต่อฐานข้อมูล Google Sheets
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-[#db5984] tracking-wider uppercase font-mono">
+                  🛠️ วิธีเชื่อมต่อเข้าสเปรดชีต Google Sheets
+                </span>
+              </div>
 
-              <div className="bg-[#fef9f7] border border-[#fbebeb] rounded-xl p-4.5 space-y-3.5 text-xs text-gray-650 leading-relaxed font-sans">
-                <p>
-                  เพื่อให้ระบบฟอร์มและบันทึกทำงานอย่างมีประสิทธิภาพใน Google Sheet และบันทึกยอดพรีออเดอร์พร้อมสลิปได้ฟรีตลอด 100% โปรดทำตามขั้นตอนดังนี้ค่ะ:
-                </p>
+              {/* Guide Selector Sub-tabs */}
+              <div className="flex border border-gray-150 p-1 bg-gray-100 rounded-xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => setGuideSubTab('nocode')}
+                  className={`flex-1 py-1.5 text-[10.5px] font-extrabold rounded-lg tracking-tight transition cursor-pointer ${
+                    guideSubTab === 'nocode'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  ทางเลือกที่ 1: เล่นง่ายปลอดภัยผ่าน Zapier / Make (แนะนํา)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGuideSubTab('script')}
+                  className={`flex-1 py-1.5 text-[10.5px] font-extrabold rounded-lg tracking-tight transition cursor-pointer ${
+                    guideSubTab === 'script'
+                      ? 'bg-[#eb5e45] text-white shadow-xs'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  ทางเลือกที่ 2: ใช้ Google Apps Script (ฟรี 100%)
+                </button>
+              </div>
 
-                <ol className="list-decimal pl-4 space-y-2 font-medium">
-                  <li>
-                    เปิดสเปรดชีต Google Sheet ใหม่หรือตัวเดิมของร้านค้า
-                  </li>
-                  <li>
-                    ไปที่แท็บเมนูด้านบน คลิก <strong>"ส่วนขยาย" (Extensions)</strong> &gt; <strong>"Apps Script"</strong>
-                  </li>
-                  <li>
-                    ลบโค้ดเริ่มต้นที่แสดงทิ้งทั้งหมด
-                  </li>
-                  <li>
-                    คลิกปุ่ม <strong>"คัดลอกโค้ดสคริปต์"</strong> เพื่อคัดลอกสคริปต์สำรองที่เขียนไว้สมบูรณ์ด้านล่างนี้ นำไปวางในหน้าวางโค้ด Apps Script
-                  </li>
-                  <li>
-                    กดปุ่ม <strong>"การทำให้ใช้งานได้" (Deploy)</strong> &gt; <strong>"การทำให้ใช้งานได้ใหม่" (New Deployment)</strong>
-                  </li>
-                  <li>
-                    เลือกประเภทเป็น <strong>"เว็บแอป" (Web app)</strong>
-                  </li>
-                  <li>
-                    ตั้งค่าให้สิทธิ์เข้าถึง: ผู้ดำเนินการเป็น <strong>"ตัวฉัน" (Me)</strong> และ ผู้มีสิทธิ์เข้าถึงเป็น <strong>"ทุกคน" (Anyone)</strong> *สำคัญมาก*
-                  </li>
-                  <li>
-                    กดบันทึก Deploy และยืนยันความปลอดภัย คัดลอกเบราว์เซอร์ **Web App URL** มาวางในช่องด้านบนเลยค่ะ!
-                  </li>
-                </ol>
-
-                <div className="pt-2">
-                  <button
-                    onClick={handleCopyScript}
-                    className="w-full bg-[#db5984] hover:bg-[#c4406a] text-white py-3.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:translate-y-0.5"
-                  >
-                    <Copy className="w-4 h-4" />
-                    <span>{copiedScript ? 'คัดลอกสำเร็จแล้วค่ะ! 💖' : 'คัดลอกโค้ดสคริปต์ Google Apps Script'}</span>
-                  </button>
+              {guideSubTab === 'nocode' ? (
+                <div className="bg-indigo-50/75 border border-indigo-100 rounded-xl p-4.5 space-y-3 text-xs text-gray-755 leading-relaxed font-sans animate-fade-in">
+                  <h4 className="font-black text-indigo-950 flex items-center gap-1.5 text-[12px] border-b border-indigo-150 pb-2">
+                    🔌 ขั้นตอนเชื่อมผ่าน Zapier / Make.com เข้า Google Sheets (รองรับภาษาไทย ปลอดภัยสูง)
+                  </h4>
+                  <p>
+                    วิธีนี้แนะนําที่สุดและปลอดภัยสูงสุด <strong>ไม่ต้องกลัวตัวอักษรภาษาไทยเพี้ยน</strong> และไม่ต้องให้คนภายนอกเข้าถึงชีตส่วนตัวของท่านเลยค่ะ:
+                  </p>
+                  
+                  <ol className="list-decimal pl-4.5 space-y-2.5 font-medium text-gray-700 font-sans">
+                    <li>
+                      <strong>สร้าง Webhook URL ปลายทาง:</strong> ลงชื่อเข้าใช้แอปเชื่อมความปลอดภัยยอดนิยมอย่าง <a href="https://zapier.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline font-extrabold">Zapier.com</a> หรือ <a href="https://make.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline font-extrabold">Make.com</a>
+                    </li>
+                    <li>
+                      สร้าง Scenario / Zap ใหม่ และระบุ <strong>Trigger</strong> แรกเป็นแอป <strong>"Webhooks"</strong> จากนั้นคลิกเลือก Custom Event/Trigger เป็น <strong>"Catch Hook"</strong>
+                    </li>
+                    <li>
+                      คัดลอกลิงก์ Webhook พิเศษที่ระบบสร้างขึ้นมา (เช่น <code>https://hooks.zapier.com/hooks/catch/...</code>)
+                    </li>
+                    <li>
+                      นำลิงก์ที่ถูกคัดลอกตัวนั้นไปป้อนลงในช่อง <strong>"Webhook URL / ลิงก์เชื่อมโยงชีต (ตั้งค่าเด่นในแท็บที่ 1)"</strong> ด้านบน จากนั้นกดปุ่ม <strong>"บันทึกข้อมูลร้านค้า"</strong>
+                    </li>
+                    <li>
+                      <strong>เชื่อมโยงเข้าชีต:</strong> ใน Zapier/Make ให้เพิ่ม Action ลำดับที่สอง เลือกแอปเป็น <strong>"Google Sheets"</strong> &gt; เลือกคำสั่งเป็น <strong>"Create Spreadsheet Row"</strong>
+                    </li>
+                    <li>
+                      ผูกมัดหรือเชื่อมโยงเข้ากับพอยเตอร์บัญชี Google ของคุณ แล้วลากไอเทมต่าง ๆ ที่ระบบได้รับจาก Webhook เช่น <code>name</code> (ชื่อ), <code>phone</code> (เบอร์โทร), <code>totalAmount</code> (ยอดรวม), <code>slipUrl</code> (ลิงก์รูปสลิป) และท่านสามารถลากฟิลด์แยกยอดเยี่ยมอย่าง <code>transferDateOnly</code> (วันที่ทำรายการอย่างเดียว) และ <code>transferTimeOnly</code> (เวลาทำรายการอย่างเดียว) ไปกรอกลงชีตอย่างเป็นระเบียบแยกคอลัมน์ได้ตามใจชอบค่ะ! 🚀
+                    </li>
+                  </ol>
+                  <div className="p-3 bg-white/70 border border-indigo-100 rounded-xl text-[10.5px] text-gray-500">
+                    💡 <strong>คำแนะนำแสนง่าย:</strong> เมื่อใส่คีย์ URL และบันทึกเรียบร้อย ลองใช้ปุ่ม <strong>"ทดสอบยิงรายการพรีออเดอร์จำลอง & ตรวจการแจ้งเตือน LINE"</strong> ในแถบตั้งค่าเพื่อส่งรายละเอียดออเดอร์จำลองสำเร็จให้ Zapier/Make ดึงแผนผังคอลัมน์ให้สมบูรณ์ขึ้นได้ค่ะ
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-4 animate-fade-in text-left">
+                  <div className="bg-[#fef9f7] border border-[#fbebeb] rounded-xl p-4.5 space-y-3.5 text-xs text-gray-650 leading-relaxed font-sans">
+                    <p>
+                      เพื่อให้ระบบฟอร์มและบันทึกทำงานอย่างมีประสิทธิภาพใน Google Sheet และบันทึกยอดพรีออเดอร์พร้อมสลิปได้ฟรีตลอด 100% โปรดทำตามขั้นตอนดังนี้ค่ะ:
+                    </p>
 
-              {/* Code Script View pre block */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-gray-500 block">พรีวิวสคริปต์ติดตั้ง (Preview Shell Code):</label>
-                <pre className="text-[10px] p-4 bg-gray-900 text-gray-100 rounded-2xl overflow-x-auto font-mono max-h-56 leading-relaxed select-all">
-                  {APPS_SCRIPT_TEMPLATE}
-                </pre>
-              </div>
+                    <ol className="list-decimal pl-4.5 space-y-2 font-medium">
+                      <li>
+                        เปิดสเปรดชีต Google Sheet ใหม่หรือตัวเดิมของร้านค้า
+                      </li>
+                      <li>
+                        ไปที่แท็บเมนูด้านบน คลิก <strong>"ส่วนขยาย" (Extensions)</strong> &gt; <strong>"Apps Script"</strong>
+                      </li>
+                      <li>
+                        ลบโค้ดเริ่มต้นที่แสดงทิ้งทั้งหมด
+                      </li>
+                      <li>
+                        คลิกปุ่ม <strong>"คัดลอกโค้ดสคริปต์"</strong> เพื่อคัดลอกสคริปต์สำรองที่เขียนไว้สมบูรณ์ด้านล่างนี้ นำไปวางในหน้าวางโค้ด Apps Script
+                      </li>
+                      <li>
+                        กดปุ่ม <strong>"การทำให้ใช้งานได้" (Deploy)</strong> &gt; <strong>"การทำให้ใช้งานได้ใหม่" (New Deployment)</strong>
+                      </li>
+                      <li>
+                        เลือกประเภทเป็น <strong>"เว็บแอป" (Web app)</strong>
+                      </li>
+                      <li>
+                        ตั้งค่าให้สิทธิ์เข้าถึง: ผู้ดำเนินการเป็น <strong>"ตัวฉัน" (Me)</strong> และ ผู้มีสิทธิ์เข้าถึงเป็น <strong>"ทุกคน" (Anyone)</strong> *สำคัญมาก*
+                      </li>
+                      <li>
+                        กดบันทึก Deploy และยืนยันความปลอดภัย คัดลอกเบราว์เซอร์ **Web App URL** มาวางในช่องด้านบนเลยค่ะ!
+                      </li>
+                    </ol>
 
+                    <div className="pt-2">
+                      <button
+                        onClick={handleCopyScript}
+                        className="w-full bg-[#db5984] hover:bg-[#c4406a] text-white py-3.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:translate-y-0.5"
+                      >
+                        <Copy className="w-4 h-4" />
+                        <span>{copiedScript ? 'คัดลอกสำเร็จแล้วค่ะ! 💖' : 'คัดลอกโค้ดสคริปต์ Google Apps Script'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Code Script View pre block */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-gray-500 block">พรีวิวสคริปต์ติดตั้ง (Preview Shell Code):</label>
+                    <pre className="text-[10px] p-4 bg-gray-900 text-gray-100 rounded-2xl overflow-x-auto font-mono max-h-56 leading-relaxed select-all">
+                      {APPS_SCRIPT_TEMPLATE}
+                    </pre>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

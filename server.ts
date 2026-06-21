@@ -64,6 +64,92 @@ const slipCache: Record<string, { buffer: Buffer; contentType: string }> = {};
 
 const EVENTS_CACHE_FILE = path.join(process.cwd(), "line_events_cache.json");
 const TOKEN_CACHE_FILE = path.join(process.cwd(), "line_token_cache.txt");
+const ORDERS_CACHE_FILE = path.join(process.cwd(), "orders_history_cache.json");
+
+let serverOrdersHistory: any[] = [];
+
+try {
+  if (fs.existsSync(ORDERS_CACHE_FILE)) {
+    const raw = fs.readFileSync(ORDERS_CACHE_FILE, "utf8");
+    serverOrdersHistory = JSON.parse(raw);
+  }
+} catch (e) {
+  console.error("Failed to load orders history cache from file", e);
+}
+
+function saveOrdersHistoryState() {
+  try {
+    fs.writeFileSync(ORDERS_CACHE_FILE, JSON.stringify(serverOrdersHistory, null, 2), "utf8");
+  } catch (e) {
+    console.error("Failed to write orders history cache to file", e);
+  }
+}
+
+function parseDateTimeStr(timeStr: string) {
+  let datePart = "-";
+  let timePart = "-";
+
+  if (!timeStr || timeStr.trim() === "" || timeStr === "-") {
+    const d = new Date();
+    const thaiYear = d.getFullYear() + 543;
+    datePart = `${d.getDate()}/${d.getMonth() + 1}/${thaiYear}`;
+    timePart = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+    return { date: datePart, time: timePart };
+  }
+
+  if (timeStr.includes("T") && (timeStr.includes("Z") || timeStr.match(/[-+]\d{2}:\d{2}/))) {
+    try {
+      const d = new Date(timeStr);
+      if (!isNaN(d.getTime())) {
+        const thaiYear = d.getFullYear() + 543;
+        datePart = `${d.getDate()}/${d.getMonth() + 1}/${thaiYear}`;
+        timePart = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+        return { date: datePart, time: timePart };
+      }
+    } catch (e) {}
+  }
+
+  const cleaned = timeStr.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  const parts = cleaned.split(' ');
+
+  if (parts.length === 1) {
+    if (parts[0].includes(":") && !parts[0].includes("/")) {
+      timePart = parts[0];
+    } else if (parts[0].includes("/") || parts[0].includes("-")) {
+      datePart = parts[0];
+    } else {
+      datePart = parts[0];
+    }
+  } else if (parts.length >= 2) {
+    let foundDate = "";
+    let foundTime = "";
+
+    for (const part of parts) {
+      const cleanPart = part.replace(/[()]/g, '').trim();
+      if (cleanPart.includes("/") || (cleanPart.includes("-") && !cleanPart.includes(":"))) {
+        foundDate = cleanPart;
+      } else if (cleanPart.includes(":")) {
+        foundTime = cleanPart;
+      }
+    }
+
+    if (foundDate) {
+      datePart = foundDate;
+    } else {
+      datePart = parts[0];
+    }
+
+    if (foundTime) {
+      const hasAmPm = parts.some(p => p.toLowerCase() === 'pm' || p.toLowerCase() === 'am');
+      const pmLabel = parts.find(p => p.toLowerCase() === 'pm' || p.toLowerCase() === 'am');
+      timePart = foundTime + (hasAmPm ? ` ${pmLabel}` : '');
+    } else {
+      timePart = parts[1];
+    }
+  }
+
+  return { date: datePart, time: timePart };
+}
 
 try {
   if (fs.existsSync(EVENTS_CACHE_FILE)) {
@@ -232,6 +318,18 @@ async function startServer() {
     }
     res.setHeader("Content-Type", slip.contentType);
     res.send(slip.buffer);
+  });
+
+  // Get all orders from server cache
+  app.get("/api/orders", (req, res) => {
+    res.json({ success: true, orders: serverOrdersHistory });
+  });
+
+  // Clear all orders from server cache
+  app.post("/api/clear-orders", (req, res) => {
+    serverOrdersHistory = [];
+    saveOrdersHistoryState();
+    res.json({ success: true, message: "Cleared all orders in server cache" });
   });
 
   // Update Line Token Cache
@@ -444,9 +542,22 @@ async function startServer() {
     }
 
     // Assign slipUrl to cleanPayload so that Google Sheet Apps Script can register it
-    if (slipUrl) {
-      (cleanPayload as any).slipUrl = slipUrl;
+    (cleanPayload as any).slipUrl = slipUrl || "-";
+
+    // Ensure shippingInfo is always populated in cleanPayload before sending to webhook
+    if (!cleanPayload.shippingInfo) {
+      if (cleanPayload.detailAddress) {
+        cleanPayload.shippingInfo = `${cleanPayload.detailAddress} ต.${cleanPayload.subdistrict || ''} อ.${cleanPayload.district || ''} จ.${cleanPayload.province || ''} ${cleanPayload.postalCode || ''}`.trim();
+      } else {
+        cleanPayload.shippingInfo = "-";
+      }
     }
+
+    // Split date & time for better integration in Zapier/Make.com
+    const rawTransferTime = cleanPayload.transferTime || new Date().toLocaleString("th-TH");
+    const parsedDt = parseDateTimeStr(rawTransferTime);
+    (cleanPayload as any).transferDateOnly = parsedDt.date;
+    (cleanPayload as any).transferTimeOnly = parsedDt.time;
 
     const paymentMethodStr = cleanPayload.paymentMethod 
       ? (cleanPayload.paymentMethod === 'อื่นๆ' ? `อื่นๆ (${cleanPayload.paymentMethodOther || ''})` : cleanPayload.paymentMethod)
@@ -456,30 +567,32 @@ async function startServer() {
     let lineSuccess = false;
     let logs: string[] = [];
 
-    // 1. Post to Google Sheet Webhook if configured
+    // 1. Post to Google Sheet Webhook / Zapier / Make if configured
     if (activeAppsScriptUrl && activeAppsScriptUrl.trim() !== "") {
       try {
+        const isGoogleScript = activeAppsScriptUrl.includes("script.google.com");
         const sheetsResponse = await fetch(activeAppsScriptUrl.trim(), {
           method: "POST",
           headers: {
-            "Content-Type": "text/plain;charset=utf-8"
+            "Content-Type": isGoogleScript ? "text/plain;charset=utf-8" : "application/json"
           },
           body: JSON.stringify(cleanPayload)
         });
 
         if (sheetsResponse.ok) {
           const resText = await sheetsResponse.text();
-          logs.push(`บันทึกลง Google Sheet สำเร็จ: ${resText}`);
+          const targetName = isGoogleScript ? "Google Sheet (Apps Script)" : "Webhook Receiver (Zapier/Make)";
+          logs.push(`บันทึกลงวงจรระบบ ${targetName} เรียบร้อยแล้วค่ะ!`);
           spreadsheetSuccess = true;
         } else {
-          logs.push(`บันทึกลง Google Sheet ผิดพลาด: Status ${sheetsResponse.status}`);
+          logs.push(`ส่งสัญญาณ Webhook ผิดพลาด: Status ${sheetsResponse.status}`);
         }
       } catch (err: any) {
-        console.error("Google Sheets App Script Error:", err);
-        logs.push(`บันทึกลง Google Sheet ล้มเหลว: ${err.message || err}`);
+        console.error("Webhook/Sheets integration error:", err);
+        logs.push(`เชื่อมโยงข้อมูลชีตล้มเหลว: ${err.message || err}`);
       }
     } else {
-      logs.push("ไม่ได้เชื่อมต่อ Google App Script Webhook (โหมดจำลองหรือประหยัดข้อมูล)");
+      logs.push("ไม่ได้ตั้งค่าลิงก์ Webhook เชื่อมต่อข้อมูลภายนอก (โหมดจำลองหรือเซฟข้อมูล)");
     }
 
     // 2. Send LINE Notification (Support Legacy LINE Notify or New LINE Messaging API)
@@ -745,6 +858,45 @@ ${addressToDisplay}
         logs.push("⚠️ ไม่ได้ระบุบัญชีผู้ส่ง Gmail บันทึกเรียบร้อยแต่ข้ามขั้นตอนส่งเมล (ระบุได้ที่หน้า Admin นะคะ)");
       }
     }
+
+    // Save to server orders history cache
+    const dServer = new Date();
+    const thaiYearServer = dServer.getFullYear() + 543;
+    const dateStrServer = `${dServer.getDate()}/${dServer.getMonth() + 1}/${thaiYearServer}`;
+    const timeStrServer = `${String(dServer.getHours()).padStart(2, '0')}:${String(dServer.getMinutes()).padStart(2, '0')}:${String(dServer.getSeconds()).padStart(2, '0')}`;
+    const orderTimestampServer = `${dateStrServer} (${timeStrServer})`;
+
+    const newOrderRecord = {
+      id: String(Date.now()),
+      timestamp: orderTimestampServer,
+      name: cleanPayload.name,
+      phone: cleanPayload.phone,
+      contact: cleanPayload.contact || "",
+      customerAccount: cleanPayload.customerAccount,
+      customerGmail: cleanPayload.customerGmail || "",
+      postalCode: cleanPayload.postalCode,
+      subdistrict: cleanPayload.subdistrict,
+      district: cleanPayload.district,
+      province: cleanPayload.province,
+      detailAddress: cleanPayload.detailAddress,
+      items: cleanPayload.items,
+      totalAmount: cleanPayload.totalAmount,
+      transferAmount: cleanPayload.transferAmount,
+      transferTime: cleanPayload.transferTime || orderTimestampServer,
+      paymentMethod: cleanPayload.paymentMethod,
+      paymentMethodOther: cleanPayload.paymentMethodOther,
+      shippingPaymentStatus: cleanPayload.shippingPaymentStatus,
+      slipBase64: cleanPayload.slipBase64,
+      isRemoteArea: cleanPayload.isRemoteArea,
+      shippingInfo: cleanPayload.shippingInfo || `${cleanPayload.detailAddress} ต.${cleanPayload.subdistrict} อ.${cleanPayload.district} จ.${cleanPayload.province} ${cleanPayload.postalCode}`,
+      customAnswers: cleanPayload.customAnswers || []
+    };
+
+    serverOrdersHistory.unshift(newOrderRecord);
+    if (serverOrdersHistory.length > 2000) {
+      serverOrdersHistory = serverOrdersHistory.slice(0, 2000);
+    }
+    saveOrdersHistoryState();
 
     const activeSenderEmail = (senderEmail && senderEmail.trim() !== "") ? senderEmail.trim() : process.env.SMTP_USER;
     const activeSenderPass = (senderAppPass && senderAppPass.trim() !== "") ? senderAppPass.trim() : process.env.SMTP_PASS;

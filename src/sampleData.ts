@@ -16,7 +16,7 @@ export const INITIAL_CONFIG: SheetConfig = {
   sheetName: "พื้นที่จัดส่งห่างไกล",
   isConfigured: true,
   useFallbackSample: false,
-  appsScriptUrl: "https://script.google.com/macros/s/AKfycbx3Fie3eDEUc5SVBvCIPe-tYEayqlAezu4JjMKlIgiLsPvw76TO_IEsMWvc4HADQmQwvA/exec",
+  appsScriptUrl: "https://hook.us2.make.com/302fbs3gh24rtoa3ryb2t7a6hzfp5j9t",
   lineToken: "",
   lineChannelAccessToken: "CgMDBf8lmjLgU3AER4RlNV1bShUmK06pL/432y6yAgvgiuId7YCOG45Ig+AfVxgh4qy9/jl+5BEQ8xW3cw3F3+O3BNMJ77lVGmuwYuAj9KQPVLhkhy96UBghfh+rDxo4aOLpgL9uM93JvRrI5F0yhQdB04t89/1O/w1cDnyilFU=",
   lineGroupId: "Ccb8f5db20f90979531527e7f94ea9873",
