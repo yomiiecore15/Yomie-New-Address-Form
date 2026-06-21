@@ -451,7 +451,14 @@ export const PreorderForm: React.FC<PreorderFormProps> = ({ config, onSuccess })
       });
 
       if (!response.ok) {
-        throw new Error(`Server returned error status code: ${response.status}`);
+        let errMsg = "";
+        try {
+          const errBody = await response.json();
+          errMsg = errBody?.message || errBody?.error || `Server error status: ${response.status}`;
+        } catch (_) {
+          errMsg = `รหัสข้อผิดพลาดเซิร์ฟเวอร์: ${response.status}`;
+        }
+        throw new Error(errMsg);
       }
 
       const resJson = await response.json();
@@ -524,7 +531,7 @@ export const PreorderForm: React.FC<PreorderFormProps> = ({ config, onSuccess })
           district: submissionPayload.district || "อำเภอเมือง"
         } as any);
       } else {
-        setFormError("ขออภัยค่ะ! ไม่สามารถเชื่อมต่อระบบหลังบ้านเพื่อบันทึกชีตออเดอร์ได้ กรุณาตรวจสอบการแชร์ชีตหรือตั้งค่า Google Webhook ในหลังบ้านร้านค้าให้ถูกต้องนะคะ");
+        setFormError(err.message || "ขออภัยค่ะ! ไม่สามารถเชื่อมต่อระบบหลังบ้านเพื่อบันทึกชีตออเดอร์ได้ กรุณาตรวจสอบการแชร์ชีตหรือตั้งค่า Google Webhook ในหลังบ้านร้านค้าให้ถูกต้องนะคะ");
       }
     } finally {
       setIsSubmitting(false);

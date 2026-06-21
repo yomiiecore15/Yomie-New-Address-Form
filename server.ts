@@ -476,14 +476,15 @@ async function startServer() {
 
   // Submit Preorder Order Route
   app.post("/api/submit-order", async (req, res) => {
-    const data: OrderSubmission = req.body;
+    try {
+      const data: OrderSubmission = req.body;
 
-    if (!data.name || !data.phone || !data.items || data.items.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วนด้วยนะคะ (ชื่อ, เบอร์โทร, รายการสินค้า)" 
-      });
-    }
+      if (!data || !data.name || !data.phone || !data.items || data.items.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วนด้วยนะคะ (ชื่อ, เบอร์โทร, รายการสินค้า)" 
+        });
+      }
 
     const { appsScriptUrl, lineToken, lineChannelAccessToken, lineGroupId, senderEmail, senderAppPass, shopName, ...cleanPayload } = data;
 
@@ -901,16 +902,23 @@ ${addressToDisplay}
     const activeSenderEmail = (senderEmail && senderEmail.trim() !== "") ? senderEmail.trim() : process.env.SMTP_USER;
     const activeSenderPass = (senderAppPass && senderAppPass.trim() !== "") ? senderAppPass.trim() : process.env.SMTP_PASS;
 
-    return res.json({
-      success: true,
-      spreadsheetConnected: !!activeAppsScriptUrl,
-      lineConnected: !!activeLineToken || (!!activeLineChannelAccessToken && !!activeLineGroupId),
-      emailConnected: !!cleanPayload.customerGmail && !!activeSenderEmail && !!activeSenderPass,
-      spreadsheetSuccess,
-      lineSuccess,
-      emailSuccess,
-      logs
-    });
+      return res.json({
+        success: true,
+        spreadsheetConnected: !!activeAppsScriptUrl,
+        lineConnected: !!activeLineToken || (!!activeLineChannelAccessToken && !!activeLineGroupId),
+        emailConnected: !!cleanPayload.customerGmail && !!activeSenderEmail && !!activeSenderPass,
+        spreadsheetSuccess,
+        lineSuccess,
+        emailSuccess,
+        logs
+      });
+    } catch (routeError: any) {
+      console.error("CRITICAL ERROR IN /api/submit-order ROUTE:", routeError);
+      return res.status(500).json({
+        success: false,
+        message: `เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์หลังบ้าน: ${routeError.message || routeError}`
+      });
+    }
   });
 
   // Vite middleware for development
