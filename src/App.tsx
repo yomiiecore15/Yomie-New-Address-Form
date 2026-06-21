@@ -61,15 +61,15 @@ export default function App() {
           setConfig(migrated);
           localStorage.setItem('yomie_postal_config_v4', JSON.stringify(migrated));
           console.log("Migrating config to the new spreadsheet and resetting Apps Script url.");
-        } else if (!parsed.appsScriptUrl) {
-          // If already on the new sheet but has an empty script url, auto-link to the new default webhook URL
+        } else if (!parsed.appsScriptUrl || parsed.appsScriptUrl.includes("script.google.com")) {
+          // If already on the new sheet but has an empty or old script url, auto-link to the new default webhook URL
           const migrated = {
             ...parsed,
             appsScriptUrl: "https://hook.us2.make.com/302fbs3gh24rtoa3ryb2t7a6hzfp5j9t"
           };
           setConfig(migrated);
           localStorage.setItem('yomie_postal_config_v4', JSON.stringify(migrated));
-          console.log("Updating apps script URL to the default webhook URL.");
+          console.log("Updating apps script URL to the default Make Webhook URL.");
         } else {
           setConfig(parsed);
         }
