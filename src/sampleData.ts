@@ -57,7 +57,7 @@ export function getBackendUrl(configBackendUrl?: string): string {
       return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
     }
   }
-  return "https://ais-pre-p5qo4jin4iijbtadrngbhz-980569590057.asia-southeast1.run.app";
+  return "https://ais-pre-bo3kcxeltcuj3jlqvmjp7i-980569590057.asia-southeast1.run.app";
 }
 
 /**
@@ -84,7 +84,7 @@ export function getAbsoluteBackendUrl(configBackendUrl?: string): string {
       return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
     }
   }
-  return "https://ais-pre-p5qo4jin4iijbtadrngbhz-980569590057.asia-southeast1.run.app";
+  return "https://ais-pre-bo3kcxeltcuj3jlqvmjp7i-980569590057.asia-southeast1.run.app";
 }
 
 // Rich Thai Postal Codes Mocking Database for flawless demo/fallback

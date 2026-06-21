@@ -61,15 +61,16 @@ export default function App() {
           setConfig(migrated);
           localStorage.setItem('yomie_postal_config_v4', JSON.stringify(migrated));
           console.log("Migrating config to the new spreadsheet and resetting Apps Script url.");
-        } else if (!parsed.appsScriptUrl || parsed.appsScriptUrl.includes("script.google.com")) {
-          // If already on the new sheet but has an empty or old script url, auto-link to the new default webhook URL
+        } else if (!parsed.appsScriptUrl || parsed.appsScriptUrl.includes("script.google.com") || (parsed.backendUrl && parsed.backendUrl.includes("p5qo4jin4iijbtadrngbhz"))) {
+          // If already on the new sheet but has an empty or old script url, or stale backend URL, auto-link to the new default webhook URL and reset backendUrl
           const migrated = {
             ...parsed,
-            appsScriptUrl: "https://hook.us2.make.com/302fbs3gh24rtoa3ryb2t7a6hzfp5j9t"
+            appsScriptUrl: "https://hook.us2.make.com/302fbs3gh24rtoa3ryb2t7a6hzfp5j9t",
+            backendUrl: (parsed.backendUrl && parsed.backendUrl.includes("p5qo4jin4iijbtadrngbhz")) ? "" : (parsed.backendUrl || "")
           };
           setConfig(migrated);
           localStorage.setItem('yomie_postal_config_v4', JSON.stringify(migrated));
-          console.log("Updating apps script URL to the default Make Webhook URL.");
+          console.log("Updating apps script URL to the default Make Webhook URL and migrating backend URL.");
         } else {
           setConfig(parsed);
         }
