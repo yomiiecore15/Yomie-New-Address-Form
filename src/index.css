@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;650;700;800&family=Space+Grotesk:wght@550;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Kanit", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes sparklePulse {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.8; }
+  50% { transform: scale(1.15) rotate(15deg); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-sparkle {
+  animation: sparklePulse 3s ease-in-out infinite;
+}
+
+/* Beautiful Vertical Stripes Background like lined notebook */
+.stripes-bg {
+  background-color: #fcfaf5;
+  background-image: linear-gradient(to right, rgba(179, 218, 241, 0.28) 1.5px, transparent 1.5px);
+  background-size: 38px 100%;
+}
+
+/* Scallop/Polkadot border wrapper to match the exact cute frame of pre-order card */
+.cute-card-frame {
+  position: relative;
+  border: 10px solid #eb5e45; /* Thick Red-Orange Coral Border */
+  border-radius: 36px;
+  background-color: #ffffff;
+  box-shadow: 0 20px 45px rgba(235, 94, 69, 0.12);
+}
+
+/* Semicircular scallop effect inside the border */
+.cute-card-frame::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  border: 5px dotted #ffffff;
+  border-radius: 30px;
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+/* Hello letter tile style */
+.hello-tile {
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 8px 0 #f4cad2, 0 10px 20px rgba(244, 202, 210, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 800;
+  color: #b82151; /* Darker, high-contrast rich sweet pink for outstanding readability */
+  text-transform: uppercase; /* Ensure they are robust capital-like letterforms */
+}
+
+/* Wavy underline animation */
+.wavy-underline {
+  text-decoration: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 4 C 2.5 4, 2.5 1, 5 1 S 7.5 4, 10 4' fill='none' stroke='%23ea6e98' stroke-width='2' stroke-linecap='round'/></svg>");
+  background-position: 0 100%;
+  background-size: 10px 5px;
+  background-repeat: repeat-x;
+  padding-bottom: 3px;
+}
+
+/* Hide Chrome/Safari/Edge/Opera up/down arrows for numeric inputs */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Hide Firefox up/down arrows for numeric inputs */
+input[type=number] {
+  -moz-appearance: textfield;
+}
+

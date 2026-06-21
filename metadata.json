@@ -1,0 +1,8 @@
+{
+  "name": "Yomie Payment/Address Form",
+  "description": "ฟอร์มเปลี่ยนที่อยู่ในการจัดส่งสำหรับคุณลูกค้ากลุ่มพรีออเดอร์ @yomiie_core",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
